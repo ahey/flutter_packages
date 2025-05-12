@@ -181,6 +181,7 @@ class GoRouteInformationParser extends RouteInformationParser<RouteMatchList> {
             pageKey: _getUniqueValueKey(),
             completer: completer!,
             matches: newMatchList,
+            replace: newMatchList.replace,
           ),
         );
       case NavigatingType.pushReplacement:
@@ -194,6 +195,7 @@ class GoRouteInformationParser extends RouteInformationParser<RouteMatchList> {
             pageKey: _getUniqueValueKey(),
             completer: completer!,
             matches: newMatchList,
+            replace: newMatchList.replace,
           ),
         );
       case NavigatingType.replace:
@@ -207,6 +209,7 @@ class GoRouteInformationParser extends RouteInformationParser<RouteMatchList> {
             pageKey: routeMatch.pageKey,
             completer: completer!,
             matches: newMatchList,
+            replace: newMatchList.replace,
           ),
         );
       case NavigatingType.go:

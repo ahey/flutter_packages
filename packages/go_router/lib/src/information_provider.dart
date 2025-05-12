@@ -107,7 +107,14 @@ class GoRouteInformationProvider extends RouteInformationProvider
     // GoRouteInformationParser should always report encoded route match list
     // in the state.
     assert(routeInformation.state != null);
-    final bool replace;
+
+    // Check if the state contains a replace flag (from RouteMatchList)
+    final Object state = routeInformation.state!;
+    final bool stateReplace = state is Map<Object?, Object?> &&
+        state.containsKey('replace') &&
+        state['replace'] == true;
+
+    bool replace;
     switch (type) {
       case RouteInformationReportingType.none:
         if (!_valueHasChanged(
@@ -115,11 +122,11 @@ class GoRouteInformationProvider extends RouteInformationProvider
             newState: routeInformation.state)) {
           return;
         }
-        replace = _valueInEngine == _kEmptyRouteInformation;
+        replace = _valueInEngine == _kEmptyRouteInformation || stateReplace;
       case RouteInformationReportingType.neglect:
         replace = true;
       case RouteInformationReportingType.navigate:
-        replace = false;
+        replace = stateReplace;
     }
     SystemNavigator.selectMultiEntryHistory();
     SystemNavigator.routeInformationUpdated(

@@ -17,10 +17,27 @@ import 'router.dart';
 import 'state.dart';
 
 /// The signature of the redirect callback.
-typedef GoRouterRedirect = FutureOr<String?> Function(
+typedef GoRouterRedirect = FutureOr<dynamic> Function(
     BuildContext context, GoRouterState state);
 
 typedef _NamedPath = ({String path, bool caseSensitive});
+
+class GoRouterRedirectResult {
+  const GoRouterRedirectResult(this.location, {this.replace = false});
+
+  factory GoRouterRedirectResult.from(dynamic redirect) {
+    if (redirect is GoRouterRedirectResult) {
+      return redirect;
+    } else if (redirect is String?) {
+      return GoRouterRedirectResult(redirect);
+    }
+
+    throw ArgumentError('Unsupported redirect: ${redirect.runtimeType}');
+  }
+
+  final String? location;
+  final bool replace;
+}
 
 /// The route configuration for GoRouter configured by the app.
 class RouteConfiguration {
@@ -357,13 +374,14 @@ class RouteConfiguration {
     FutureOr<RouteMatchList> processRedirect(RouteMatchList prevMatchList) {
       final String prevLocation = prevMatchList.uri.toString();
       FutureOr<RouteMatchList> processTopLevelRedirect(
-          String? topRedirectLocation) {
-        if (topRedirectLocation != null &&
-            topRedirectLocation != prevLocation) {
+          GoRouterRedirectResult topRedirect) {
+        if (topRedirect.location != null &&
+            topRedirect.location != prevLocation) {
           final RouteMatchList newMatch = _getNewMatches(
-            topRedirectLocation,
+            topRedirect.location!,
             prevMatchList.uri,
             redirectHistory,
+            replace: topRedirect.replace,
           );
           if (newMatch.isError) {
             return newMatch;
@@ -376,13 +394,14 @@ class RouteConfiguration {
         }
 
         FutureOr<RouteMatchList> processRouteLevelRedirect(
-            String? routeRedirectLocation) {
-          if (routeRedirectLocation != null &&
-              routeRedirectLocation != prevLocation) {
+            GoRouterRedirectResult routeRedirect) {
+          if (routeRedirect.location != null &&
+              routeRedirect.location != prevLocation) {
             final RouteMatchList newMatch = _getNewMatches(
-              routeRedirectLocation,
+              routeRedirect.location!,
               prevMatchList.uri,
               redirectHistory,
+              replace: routeRedirect.replace,
             );
 
             if (newMatch.isError) {
@@ -404,27 +423,35 @@ class RouteConfiguration {
           }
           return true;
         });
-        final FutureOr<String?> routeLevelRedirectResult =
+        final FutureOr<GoRouterRedirectResult> routeLevelRedirectResult =
             _getRouteLevelRedirect(context, prevMatchList, routeMatches, 0);
 
-        if (routeLevelRedirectResult is String?) {
+        if (routeLevelRedirectResult is GoRouterRedirectResult) {
           return processRouteLevelRedirect(routeLevelRedirectResult);
         }
+
         return routeLevelRedirectResult
             .then<RouteMatchList>(processRouteLevelRedirect);
       }
 
       redirectHistory.add(prevMatchList);
+
       // Check for top-level redirect
-      final FutureOr<String?> topRedirectResult = _routingConfig.value.redirect(
+      final dynamic topRedirectValue = _routingConfig.value.redirect(
         context,
         buildTopLevelGoRouterState(prevMatchList),
       );
 
-      if (topRedirectResult is String?) {
-        return processTopLevelRedirect(topRedirectResult);
+      // Handle the case when redirect returns a Future
+      if (topRedirectValue is Future<dynamic>) {
+        return topRedirectValue.then((dynamic redirectLocation) {
+          return processTopLevelRedirect(
+              GoRouterRedirectResult.from(redirectLocation));
+        });
+      } else {
+        return processTopLevelRedirect(
+            GoRouterRedirectResult.from(topRedirectValue));
       }
-      return topRedirectResult.then<RouteMatchList>(processTopLevelRedirect);
     }
 
     if (prevMatchListFuture is RouteMatchList) {
@@ -433,38 +460,53 @@ class RouteConfiguration {
     return prevMatchListFuture.then<RouteMatchList>(processRedirect);
   }
 
-  FutureOr<String?> _getRouteLevelRedirect(
+  FutureOr<GoRouterRedirectResult> _getRouteLevelRedirect(
     BuildContext context,
     RouteMatchList matchList,
     List<RouteMatchBase> routeMatches,
     int currentCheckIndex,
   ) {
     if (currentCheckIndex >= routeMatches.length) {
-      return null;
+      return const GoRouterRedirectResult(null);
     }
+
     final RouteMatchBase match = routeMatches[currentCheckIndex];
-    FutureOr<String?> processRouteRedirect(String? newLocation) =>
-        newLocation ??
-        _getRouteLevelRedirect(
+
+    FutureOr<GoRouterRedirectResult> processRouteRedirect(
+        GoRouterRedirectResult newRedirect) {
+      if (newRedirect.location != null) {
+        return newRedirect;
+      } else {
+        return _getRouteLevelRedirect(
             context, matchList, routeMatches, currentCheckIndex + 1);
+      }
+    }
+
     final RouteBase route = match.route;
-    final FutureOr<String?> routeRedirectResult = route.redirect!.call(
+
+    // Get the redirect result from the route
+    final dynamic redirectResult = route.redirect!.call(
       context,
       match.buildState(this, matchList),
     );
-    if (routeRedirectResult is String?) {
-      return processRouteRedirect(routeRedirectResult);
+
+    // Handle the case when redirect returns a Future
+    if (redirectResult is Future<dynamic>) {
+      return redirectResult.then((dynamic redirectLocation) {
+        return processRouteRedirect(
+            GoRouterRedirectResult.from(redirectLocation));
+      });
+    } else {
+      return processRouteRedirect(GoRouterRedirectResult.from(redirectResult));
     }
-    return routeRedirectResult.then<String?>(processRouteRedirect);
   }
 
-  RouteMatchList _getNewMatches(
-    String newLocation,
-    Uri previousLocation,
-    List<RouteMatchList> redirectHistory,
-  ) {
+  RouteMatchList _getNewMatches(String newLocation, Uri previousLocation,
+      List<RouteMatchList> redirectHistory,
+      {bool replace = false}) {
     try {
-      final RouteMatchList newMatch = findMatch(Uri.parse(newLocation));
+      final RouteMatchList newMatch =
+          findMatch(Uri.parse(newLocation)).copyWith(replace: replace);
       _addRedirect(redirectHistory, newMatch, previousLocation);
       return newMatch;
     } on GoException catch (e) {

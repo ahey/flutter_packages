@@ -436,9 +436,12 @@ class ShellRouteMatch extends RouteMatchBase {
 /// The route match that represent route pushed through [GoRouter.push].
 class ImperativeRouteMatch extends RouteMatch {
   /// Constructor for [ImperativeRouteMatch].
-  ImperativeRouteMatch(
-      {required super.pageKey, required this.matches, required this.completer})
-      : super(
+  ImperativeRouteMatch({
+    required super.pageKey,
+    required this.matches,
+    required this.completer,
+    this.replace = false,
+  }) : super(
           route: _getsLastRouteFromMatches(matches),
           matchedLocation: _getsMatchedLocationFromMatches(matches),
         );
@@ -463,6 +466,9 @@ class ImperativeRouteMatch extends RouteMatch {
 
   /// The completer for the future returned by [GoRouter.push].
   final Completer<Object?> completer;
+
+  /// Whether the route should replace the current history entry.
+  final bool replace;
 
   /// Called when the corresponding [Route] associated with this route match is
   /// completed.
@@ -502,6 +508,7 @@ class RouteMatchList with Diagnosticable {
     this.extra,
     this.error,
     required this.pathParameters,
+    this.replace = false,
   }) : fullPath = _generateFullPath(matches);
 
   /// Constructs an empty matches object.
@@ -538,6 +545,12 @@ class RouteMatchList with Diagnosticable {
   /// '/family/:fid/person/:pid'
   /// ```
   final String fullPath;
+
+  /// Whether the route should replace the current history entry.
+  ///
+  /// This is set when a redirect callback returns a [GoRouterRedirectResult]
+  /// with [GoRouterRedirectResult.replace] set to true.
+  final bool replace;
 
   /// Generates the full path (ex: `'/family/:fid/person/:pid'`) of a list of
   /// [RouteMatch].
@@ -810,13 +823,15 @@ class RouteMatchList with Diagnosticable {
     List<RouteMatchBase>? matches,
     Uri? uri,
     Map<String, String>? pathParameters,
+    bool? replace,
   }) {
     return RouteMatchList(
         matches: matches ?? this.matches,
         uri: uri ?? this.uri,
         extra: extra,
         error: error,
-        pathParameters: pathParameters ?? this.pathParameters);
+        pathParameters: pathParameters ?? this.pathParameters,
+        replace: replace ?? this.replace);
   }
 
   @override
@@ -877,6 +892,7 @@ class RouteMatchListCodec extends Codec<RouteMatchList, Map<Object?, Object?>> {
   static const String _jsonCodecName = 'json';
   static const String _customCodecName = 'custom';
   static const String _encodedKey = 'encoded';
+  static const String _replaceKey = 'replace';
 
   @override
   final Converter<RouteMatchList, Map<Object?, Object?>> encoder;
@@ -904,15 +920,17 @@ class _RouteMatchListEncoder
         imperativeMatches
             .map((ImperativeRouteMatch e) => _toPrimitives(
                 e.matches.uri.toString(), e.matches.extra,
-                pageKey: e.pageKey.value))
+                pageKey: e.pageKey.value, replace: e.replace))
             .toList();
 
     return _toPrimitives(input.uri.toString(), input.extra,
-        imperativeMatches: encodedImperativeMatches);
+        imperativeMatches: encodedImperativeMatches, replace: input.replace);
   }
 
   Map<Object?, Object?> _toPrimitives(String location, Object? extra,
-      {List<Map<Object?, Object?>>? imperativeMatches, String? pageKey}) {
+      {List<Map<Object?, Object?>>? imperativeMatches,
+      String? pageKey,
+      bool replace = false}) {
     Map<String, Object?> encodedExtra;
     if (configuration.extraCodec != null) {
       encodedExtra = <String, Object?>{
@@ -944,6 +962,8 @@ class _RouteMatchListEncoder
       if (imperativeMatches != null)
         RouteMatchListCodec._imperativeMatchesKey: imperativeMatches,
       if (pageKey != null) RouteMatchListCodec._pageKey: pageKey,
+      // Include the replace flag in the encoded data
+      RouteMatchListCodec._replaceKey: replace,
     };
   }
 }
@@ -962,6 +982,9 @@ class _RouteMatchListDecoder
         input[RouteMatchListCodec._extraKey]! as Map<Object?, Object?>;
     final Object? extra;
 
+    // Extract the replace flag from the encoded data
+    final bool replace = input[RouteMatchListCodec._replaceKey] == true;
+
     if (encodedExtra[RouteMatchListCodec._codecKey] ==
         RouteMatchListCodec._jsonCodecName) {
       extra = json.decoder
@@ -970,8 +993,9 @@ class _RouteMatchListDecoder
       extra = configuration.extraCodec
           ?.decode(encodedExtra[RouteMatchListCodec._encodedKey]);
     }
-    RouteMatchList matchList =
-        configuration.findMatch(Uri.parse(rootLocation), extra: extra);
+    RouteMatchList matchList = configuration
+        .findMatch(Uri.parse(rootLocation), extra: extra)
+        .copyWith(replace: replace);
 
     final List<Object?>? imperativeMatches =
         input[RouteMatchListCodec._imperativeMatchesKey] as List<Object?>?;
@@ -988,6 +1012,8 @@ class _RouteMatchListDecoder
           // https://github.com/flutter/flutter/issues/128122.
           completer: Completer<Object?>(),
           matches: imperativeMatchList,
+          replace:
+              encodedImperativeMatch[RouteMatchListCodec._replaceKey] == true,
         );
         matchList = matchList.push(imperativeMatch);
       }
