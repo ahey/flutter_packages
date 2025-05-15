@@ -311,6 +311,9 @@ class RouteMatch extends RouteMatchBase {
   @override
   final ValueKey<String> pageKey;
 
+  /// Whether this route should be replaced in browser history when navigating away from it.
+  bool get replaceRoute => route.replaceRoute;
+
   @override
   bool operator ==(Object other) {
     if (other.runtimeType != runtimeType) {
@@ -440,8 +443,9 @@ class ImperativeRouteMatch extends RouteMatch {
     required super.pageKey,
     required this.matches,
     required this.completer,
-    this.replace = false,
-  }) : super(
+    bool replace = false,
+  })  : replace = replace || matches.replace,
+        super(
           route: _getsLastRouteFromMatches(matches),
           matchedLocation: _getsMatchedLocationFromMatches(matches),
         );
@@ -508,8 +512,23 @@ class RouteMatchList with Diagnosticable {
     this.extra,
     this.error,
     required this.pathParameters,
-    this.replace = false,
-  }) : fullPath = _generateFullPath(matches);
+    bool replace = false,
+  })  : replace = replace || _shouldReplaceFromMatches(matches),
+        fullPath = _generateFullPath(matches);
+
+  /// Checks if any route match in the list has replaceRoute: true.
+  static bool _shouldReplaceFromMatches(List<RouteMatchBase> matches) {
+    for (final RouteMatchBase match in matches) {
+      if (match is RouteMatch && match.replaceRoute) {
+        return true;
+      } else if (match is ShellRouteMatch) {
+        if (_shouldReplaceFromMatches(match.matches)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
   /// Constructs an empty matches object.
   static RouteMatchList empty = RouteMatchList(

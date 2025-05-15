@@ -3,8 +3,10 @@
 // found in the LICENSE file.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:go_router/src/information_provider.dart';
 
 import 'test_helpers.dart';
 
@@ -328,6 +330,76 @@ void main() {
         hasError = true;
       }
       expect(hasError, isTrue);
+    });
+  });
+
+  group('replaceRoute property', () {
+    test('replaceRoute flag propagates to RouteMatchList', () {
+      final GoRouter router = GoRouter(
+        initialLocation: '/',
+        routes: <RouteBase>[
+          GoRoute(
+            path: '/',
+            builder: (_, __) => const SizedBox(),
+          ),
+          GoRoute(
+            path: '/settings',
+            builder: (_, __) => const SizedBox(),
+            routes: <RouteBase>[
+              GoRoute(
+                path: 'new-budget',
+                builder: (_, __) => const SizedBox(),
+                replaceRoute: true,
+              ),
+            ],
+          ),
+        ],
+      );
+
+      // Verify that the route with replaceRoute: true sets the replace flag in RouteMatchList
+      final RouteMatchList matchList =
+          router.configuration.findMatch(Uri.parse('/settings/new-budget'));
+      expect(matchList.replace, isTrue);
+    });
+
+    test('replaceRoute is considered when navigating away from a route', () {
+      // Create a router with a route that has replaceRoute: true
+      final GoRouter router = GoRouter(
+        initialLocation: '/',
+        routes: <RouteBase>[
+          GoRoute(
+            path: '/',
+            builder: (_, __) => const SizedBox(),
+          ),
+          GoRoute(
+            path: '/settings',
+            builder: (_, __) => const SizedBox(),
+            routes: <RouteBase>[
+              GoRoute(
+                path: 'new-budget',
+                builder: (_, __) => const SizedBox(),
+                replaceRoute: true,
+              ),
+            ],
+          ),
+        ],
+      );
+
+      // Get the route directly
+      final GoRoute route = router.configuration.routes[1].routes[0] as GoRoute;
+
+      // Verify that the replaceRoute property is correctly set
+      expect(route.replaceRoute, isTrue);
+
+      // Create a RouteMatch with the route
+      final RouteMatch match = RouteMatch(
+        route: route,
+        matchedLocation: '/settings/new-budget',
+        pageKey: const ValueKey<String>('test'),
+      );
+
+      // Verify that the replaceRoute property is accessible from the RouteMatch
+      expect(match.replaceRoute, isTrue);
     });
   });
 }

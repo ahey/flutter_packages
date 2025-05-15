@@ -278,6 +278,7 @@ class GoRoute extends RouteBase {
     super.redirect,
     this.onExit,
     this.caseSensitive = true,
+    this.replaceRoute = false,
     super.routes = const <RouteBase>[],
   })  : assert(path.isNotEmpty, 'GoRoute path cannot be empty'),
         assert(name == null || name.isNotEmpty, 'GoRoute name cannot be empty'),
@@ -449,6 +450,16 @@ class GoRoute extends RouteBase {
   ///
   /// Defaults to `true`.
   final bool caseSensitive;
+
+  /// Whether this route should be replaced in browser history when navigating away from it.
+  ///
+  /// When set to `true`, whenever the user is visiting a route coming from this route,
+  /// this route will be replaced in the browser history. For example, if we have
+  /// `/settings` and `/settings/new-budget` and the new-budget route has `replaceRoute: true`,
+  /// when the user hits the browser back button from the new-budget route, the /settings
+  /// route replaces the new-budget route. That way, the new-budget route will not be
+  /// kept in browser history.
+  final bool replaceRoute;
 
   // TODO(chunhtai): move all regex related help methods to path_utils.dart.
   /// Match this route against a location.

@@ -49,8 +49,8 @@ class RouteInformationState<T> {
     this.completer,
     this.baseRouteMatchList,
     required this.type,
-  })  : assert((type == NavigatingType.go || type == NavigatingType.restore) ==
-            (completer == null)),
+  })  : assert(
+            (type == NavigatingType.go || type == NavigatingType.restore) == (completer == null)),
         assert((type != NavigatingType.go) == (baseRouteMatchList != null));
 
   /// The extra object used when navigating with [GoRouter].
@@ -84,8 +84,7 @@ class GoRouteInformationProvider extends RouteInformationProvider
   })  : _refreshListenable = refreshListenable,
         _value = RouteInformation(
           uri: Uri.parse(initialLocation),
-          state: RouteInformationState<void>(
-              extra: initialExtra, type: NavigatingType.go),
+          state: RouteInformationState<void>(extra: initialExtra, type: NavigatingType.go),
         ),
         _valueInEngine = _kEmptyRouteInformation,
         _routerNeglect = routerNeglect {
@@ -97,29 +96,25 @@ class GoRouteInformationProvider extends RouteInformationProvider
   final bool _routerNeglect;
 
   static WidgetsBinding get _binding => WidgetsBinding.instance;
-  static final RouteInformation _kEmptyRouteInformation =
-      RouteInformation(uri: Uri.parse(''));
+  static final RouteInformation _kEmptyRouteInformation = RouteInformation(uri: Uri.parse(''));
 
   @override
   void routerReportsNewRouteInformation(RouteInformation routeInformation,
-      {RouteInformationReportingType type =
-          RouteInformationReportingType.none}) {
+      {RouteInformationReportingType type = RouteInformationReportingType.none}) {
     // GoRouteInformationParser should always report encoded route match list
     // in the state.
     assert(routeInformation.state != null);
 
     // Check if the state contains a replace flag (from RouteMatchList)
     final Object state = routeInformation.state!;
-    final bool stateReplace = state is Map<Object?, Object?> &&
-        state.containsKey('replace') &&
-        state['replace'] == true;
+    final bool stateReplace =
+        state is Map<Object?, Object?> && state.containsKey('replace') && state['replace'] == true;
 
     bool replace;
     switch (type) {
       case RouteInformationReportingType.none:
         if (!_valueHasChanged(
-            newLocationUri: routeInformation.uri,
-            newState: routeInformation.state)) {
+            newLocationUri: routeInformation.uri, newState: routeInformation.state)) {
           return;
         }
         replace = _valueInEngine == _kEmptyRouteInformation || stateReplace;
@@ -154,8 +149,7 @@ class GoRouteInformationProvider extends RouteInformationProvider
       uri = concatenateUris(_value.uri, uri);
     }
 
-    final bool shouldNotify =
-        _valueHasChanged(newLocationUri: uri, newState: state);
+    final bool shouldNotify = _valueHasChanged(newLocationUri: uri, newState: state);
     _value = RouteInformation(uri: uri, state: state);
     if (shouldNotify) {
       notifyListeners();
@@ -163,14 +157,16 @@ class GoRouteInformationProvider extends RouteInformationProvider
   }
 
   /// Pushes the `location` as a new route on top of `base`.
-  Future<T?> push<T>(String location,
-      {required RouteMatchList base, Object? extra}) {
+  Future<T?> push<T>(String location, {required RouteMatchList base, Object? extra}) {
     final Completer<T?> completer = Completer<T?>();
+    final bool shouldReplace = base.isNotEmpty && base.last.replaceRoute;
+    final RouteMatchList baseWithReplace = shouldReplace ? base.copyWith(replace: true) : base;
+
     _setValue(
       location,
       RouteInformationState<T>(
         extra: extra,
-        baseRouteMatchList: base,
+        baseRouteMatchList: baseWithReplace,
         completer: completer,
         type: NavigatingType.push,
       ),
@@ -180,6 +176,7 @@ class GoRouteInformationProvider extends RouteInformationProvider
 
   /// Replace the current route matches with the `location`.
   void go(String location, {Object? extra}) {
+    // For go navigation, we don't need to check replaceRoute since it's replacing the entire stack
     _setValue(
       location,
       RouteInformationState<void>(
@@ -203,14 +200,20 @@ class GoRouteInformationProvider extends RouteInformationProvider
 
   /// Removes the top-most route match from `base` and pushes the `location` as a
   /// new route on top.
-  Future<T?> pushReplacement<T>(String location,
-      {required RouteMatchList base, Object? extra}) {
+  Future<T?> pushReplacement<T>(String location, {required RouteMatchList base, Object? extra}) {
     final Completer<T?> completer = Completer<T?>();
+
+    final bool shouldReplace =
+        base.isNotEmpty && base.last is RouteMatch && (base.last as RouteMatch).replaceRoute;
+
+    // Create a new RouteMatchList with replace: true if the current route has replaceRoute: true
+    final RouteMatchList baseWithReplace = shouldReplace ? base.copyWith(replace: true) : base;
+
     _setValue(
       location,
       RouteInformationState<T>(
         extra: extra,
-        baseRouteMatchList: base,
+        baseRouteMatchList: baseWithReplace,
         completer: completer,
         type: NavigatingType.pushReplacement,
       ),
@@ -219,14 +222,21 @@ class GoRouteInformationProvider extends RouteInformationProvider
   }
 
   /// Replaces the top-most route match from `base` with the `location`.
-  Future<T?> replace<T>(String location,
-      {required RouteMatchList base, Object? extra}) {
+  Future<T?> replace<T>(String location, {required RouteMatchList base, Object? extra}) {
     final Completer<T?> completer = Completer<T?>();
+
+    // Check if the current route has replaceRoute: true
+    final bool shouldReplace =
+        base.isNotEmpty && base.last is RouteMatch && (base.last as RouteMatch).replaceRoute;
+
+    // Create a new RouteMatchList with replace: true if the current route has replaceRoute: true
+    final RouteMatchList baseWithReplace = shouldReplace ? base.copyWith(replace: true) : base;
+
     _setValue(
       location,
       RouteInformationState<T>(
         extra: extra,
-        baseRouteMatchList: base,
+        baseRouteMatchList: baseWithReplace,
         completer: completer,
         type: NavigatingType.replace,
       ),
@@ -252,16 +262,12 @@ class GoRouteInformationProvider extends RouteInformationProvider
     notifyListeners();
   }
 
-  bool _valueHasChanged(
-      {required Uri newLocationUri, required Object? newState}) {
-    const DeepCollectionEquality deepCollectionEquality =
-        DeepCollectionEquality();
-    return !deepCollectionEquality.equals(
-            _value.uri.path, newLocationUri.path) ||
+  bool _valueHasChanged({required Uri newLocationUri, required Object? newState}) {
+    const DeepCollectionEquality deepCollectionEquality = DeepCollectionEquality();
+    return !deepCollectionEquality.equals(_value.uri.path, newLocationUri.path) ||
         !deepCollectionEquality.equals(
             _value.uri.queryParameters, newLocationUri.queryParameters) ||
-        !deepCollectionEquality.equals(
-            _value.uri.fragment, newLocationUri.fragment) ||
+        !deepCollectionEquality.equals(_value.uri.fragment, newLocationUri.fragment) ||
         !deepCollectionEquality.equals(_value.state, newState);
   }
 
